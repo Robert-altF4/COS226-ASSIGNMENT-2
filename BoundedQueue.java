@@ -2,7 +2,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
 
-public class BoundedQueue<T> {
+public class BoundedQueue<T> implements JobQueue<T> {
 
     private class Node {
         T item;
@@ -46,8 +46,13 @@ public class BoundedQueue<T> {
             tail.next = e; 
             tail = tail.next; 
             
-            if (size.getAndIncrement() == 0) { 
+            int c = size.getAndIncrement();
+            if (c == 0) { 
                 mustWakeDequeuers = true; 
+            }
+
+            if (c + 1 < capacity) {
+                notFullCondition.signal();
             }
         } catch (InterruptedException ex) {
             Thread.currentThread().interrupt();
@@ -79,8 +84,14 @@ public class BoundedQueue<T> {
             head = first;
             head.item = null;
             
-            if (size.getAndDecrement() == capacity) {
+            int c = size.getAndDecrement();
+            if (c == capacity) {
                 mustWakeEnqueuers = true;
+            }
+            
+
+            if (c > 1) {
+                notEmptyCondition.signal();
             }
         } catch (InterruptedException ex) {
             Thread.currentThread().interrupt();
